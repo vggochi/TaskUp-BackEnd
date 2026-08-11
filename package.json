@@ -1,28 +1,15 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "private": true,
   "type": "module",
-  "main": "servidor.js",
   "scripts": {
-    "start": "node servidor.js",
-    "dev": "node servidor.js"
+    "start": "node servidor.js"
   },
-  "keywords": [
-    "taskup",
-    "estoque",
-    "arquivo-morto",
-    "express",
-    "supabase"
-  ],
-  "author": "",
-  "license": "ISC",
-  "description": "API REST do sistema TaskUp de controle de estoque",
   "dependencies": {
-    "@supabase/supabase-js": "^2.57.0",
+    "@supabase/supabase-js": "^2.0.0",
     "cors": "^2.8.5",
-    "dotenv": "^17.4.2",
-    "express": "^5.2.1",
-    "qrcode": "^1.5.4"
+    "dotenv": "^16.0.0",
+    "express": "^5.0.0",
+    "qrcode": "^1.5.0"
   }
 }
