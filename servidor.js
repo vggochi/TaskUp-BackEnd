@@ -14,30 +14,58 @@ const app = express();
 
 
 // =====================================================
-// CONFIGURAÇÕES
+// CONFIGURAÇÃO
 // =====================================================
 
-app.use(cors());
+app.use(
+    cors({
+        origin: true,
+        methods: [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "OPTIONS"
+        ],
+        allowedHeaders: [
+            "Content-Type",
+            "Authorization"
+        ]
+    })
+);
 
 app.use(express.json());
 
-app.use(express.urlencoded({
-    extended: true
-}));
+app.use(
+    express.urlencoded({
+        extended: true
+    })
+);
 
 
 // =====================================================
-// LOG DE REQUISIÇÕES
+// LOG
 // =====================================================
 
 app.use((req, res, next) => {
 
-    console.log("=================================");
-    console.log("TASKUP REQUEST");
-    console.log("METHOD:", req.method);
-    console.log("URL:", req.originalUrl);
-    console.log("BODY:", req.body);
-    console.log("=================================");
+    console.log(
+        `[TASKUP] ${req.method} ${req.originalUrl}`
+    );
+
+    if (
+        req.method !== "GET" &&
+        req.body &&
+        Object.keys(req.body).length
+    ) {
+
+        console.log(
+            "[BODY]",
+            req.body
+        );
+
+    }
 
     next();
 
@@ -45,85 +73,65 @@ app.use((req, res, next) => {
 
 
 // =====================================================
-// ROTA PRINCIPAL
+// PRINCIPAL
 // =====================================================
 
-app.get("/", (req, res) => {
+app.get(
+    "/",
+    (req, res) => {
 
-    res.status(200).json({
+        res.json({
+            nome: "TaskUp API",
+            versao: "1.0.0",
+            status: "online"
+        });
 
-        nome: "TaskUp API",
-
-        versao: "1.0.0",
-
-        status: "online",
-
-        mensagem: "API TaskUp funcionando corretamente."
-
-    });
-
-});
+    }
+);
 
 
 // =====================================================
 // API
 // =====================================================
 
-app.get("/api", (req, res) => {
+app.get(
+    "/api",
+    (req, res) => {
 
-    res.status(200).json({
+        res.json({
+            nome: "TaskUp API",
+            versao: "1.0.0",
+            status: "online",
+            mensagem:
+                "API funcionando corretamente."
+        });
 
-        nome: "TaskUp API",
-
-        status: "online",
-
-        mensagem: "API funcionando corretamente."
-
-    });
-
-});
-
-
-// =====================================================
-// TESTE DA API
-// =====================================================
-
-app.get("/api/teste", (req, res) => {
-
-    res.status(200).json({
-
-        sucesso: true,
-
-        mensagem: "Servidor TaskUp atualizado e funcionando.",
-
-        timestamp: new Date().toISOString()
-
-    });
-
-});
+    }
+);
 
 
 // =====================================================
-// TESTE DAS MOVIMENTAÇÕES
+// TESTE
 // =====================================================
 
-app.get("/api/movimentacoes-teste", (req, res) => {
+app.get(
+    "/api/teste",
+    (req, res) => {
 
-    res.status(200).json({
+        res.json({
+            sucesso: true,
+            mensagem:
+                "TaskUp API funcionando.",
+            timestamp:
+                new Date().toISOString()
+        });
 
-        sucesso: true,
-
-        rota: "movimentacoes-teste",
-
-        mensagem: "A rota de movimentações está sendo alcançada."
-
-    });
-
-});
+    }
+);
 
 
 // =====================================================
-// FAMÍLIAS
+// ROTAS
 // =====================================================
 
 app.use(
@@ -131,63 +139,20 @@ app.use(
     familiasRouter
 );
 
-
-// =====================================================
-// TIPOS
-// =====================================================
-
 app.use(
     "/api/tipos",
     tiposRouter
 );
-
-
-// =====================================================
-// PRODUTOS
-// =====================================================
 
 app.use(
     "/api/produtos",
     produtosRouter
 );
 
-
-// =====================================================
-// MOVIMENTAÇÕES
-// =====================================================
-
-console.log("=================================");
-console.log("CARREGANDO ROTAS DE MOVIMENTAÇÕES");
-console.log(
-    "movimentacoesRouter:",
-    typeof movimentacoesRouter
-);
-console.log("=================================");
-
-
 app.use(
     "/api/movimentacoes",
-
-    (req, res, next) => {
-
-        console.log("---------------------------------");
-        console.log("MOVIMENTAÇÃO RECEBIDA");
-        console.log("METHOD:", req.method);
-        console.log("URL:", req.originalUrl);
-        console.log("BODY:", req.body);
-        console.log("---------------------------------");
-
-        next();
-
-    },
-
     movimentacoesRouter
 );
-
-
-// =====================================================
-// PAINEL
-// =====================================================
 
 app.use(
     "/api/painel",
@@ -196,82 +161,115 @@ app.use(
 
 
 // =====================================================
-// ROTA NÃO ENCONTRADA
+// 404
 // =====================================================
 
-app.use((req, res) => {
+app.use(
+    (req, res) => {
 
-    console.log("=================================");
-    console.log("404 - ROTA NÃO ENCONTRADA");
-    console.log("METHOD:", req.method);
-    console.log("URL:", req.originalUrl);
-    console.log("=================================");
+        console.log(
+            `[404] ${req.method} ${req.originalUrl}`
+        );
 
-    res.status(404).json({
+        res.status(404).json({
+            erro: "Rota não encontrada.",
+            rota: req.originalUrl,
+            metodo: req.method
+        });
 
-        erro: "Rota não encontrada.",
-
-        rota: req.originalUrl,
-
-        metodo: req.method
-
-    });
-
-});
+    }
+);
 
 
 // =====================================================
-// TRATAMENTO DE ERROS
+// ERRO
 // =====================================================
 
-app.use((erro, req, res, next) => {
+app.use(
+    (erro, req, res, next) => {
 
-    console.error("=================================");
-    console.error("ERRO INTERNO TASKUP");
-    console.error("=================================");
+        console.error(
+            "================================="
+        );
 
-    console.error(erro);
+        console.error(
+            "TASKUP API - ERRO"
+        );
 
-    res.status(500).json({
+        console.error(
+            erro
+        );
 
-        erro: "Erro interno do servidor.",
+        console.error(
+            "================================="
+        );
 
-        mensagem: erro.message
+        const status =
+            Number(erro.status) >= 400
+                ? Number(erro.status)
+                : 500;
 
-    });
+        res.status(status).json({
 
-});
+            erro:
+                status === 500
+                    ? "Erro interno do servidor."
+                    : erro.message,
+
+            mensagem:
+                erro.message,
+
+            codigo:
+                erro.code || null
+
+        });
+
+    }
+);
 
 
 // =====================================================
-// EXECUÇÃO LOCAL
+// LOCAL
 // =====================================================
 
-if (process.env.NODE_ENV !== "production") {
+if (
+    process.env.NODE_ENV !==
+    "production"
+) {
 
     const PORT =
         process.env.PORT || 3000;
 
-    app.listen(PORT, () => {
+    app.listen(
+        PORT,
+        () => {
 
-        console.log("=================================");
-        console.log("🚀 TASKUP API");
-        console.log("=================================");
-        console.log(
-            `Servidor rodando em http://localhost:${PORT}`
-        );
-        console.log(
-            `API: http://localhost:${PORT}/api`
-        );
-        console.log(
-            `Teste: http://localhost:${PORT}/api/teste`
-        );
-        console.log(
-            `Movimentações: http://localhost:${PORT}/api/movimentacoes`
-        );
-        console.log("=================================");
+            console.log("");
+            console.log(
+                "================================="
+            );
+            console.log(
+                "🚀 TASKUP API"
+            );
+            console.log(
+                "================================="
+            );
+            console.log(
+                `Servidor: http://localhost:${PORT}`
+            );
+            console.log(
+                `API: http://localhost:${PORT}/api`
+            );
+            console.log(
+                `Movimentações: http://localhost:${PORT}/api/movimentacoes`
+            );
+            console.log(
+                "================================="
+            );
+            console.log("");
 
-    });
+        }
+    );
 
 }
 
