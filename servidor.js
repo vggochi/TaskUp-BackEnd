@@ -74,8 +74,16 @@ app.use(
     produtosRouter
 );
 
+console.log("=================================");
+console.log("ROTA DE MOVIMENTAÇÕES CARREGADA");
+console.log("movimentacoesRouter:", typeof movimentacoesRouter);
+console.log("=================================");
 app.use(
     "/api/movimentacoes",
+    (req, res, next) => {
+        console.log("MOVIMENTAÇÃO:", req.method, req.originalUrl);
+        next();
+    },
     movimentacoesRouter
 );
 
