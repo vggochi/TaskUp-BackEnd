@@ -16,6 +16,14 @@ app.use(cors());
 
 app.use(express.json());
 
+app.get("/api/teste", (req, res) => {
+    res.json({
+        sucesso: true,
+        mensagem: "Servidor TaskUp atualizado",
+        timestamp: new Date().toISOString()
+    });
+});
+
 
 // ==========================================
 // ROTA PRINCIPAL
