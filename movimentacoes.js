@@ -1,7 +1,5 @@
 import { Router } from "express";
-
 import { supabase } from "./supabase.js";
-
 import {
     asyncHandler,
     validarSKU,
@@ -29,8 +27,7 @@ router.get(
             limite = 100
         } = req.query;
 
-
-        let consulta = supabase
+        let query = supabase
             .from("movimentacoes")
             .select(`
                 *,
@@ -38,10 +35,8 @@ router.get(
                     id,
                     sku,
                     nome,
-                    descricao,
                     localizacao,
-                    quantidade,
-                    estoque_minimo
+                    quantidade
                 ),
                 familia:familias(
                     id,
@@ -64,117 +59,56 @@ router.get(
                 )
             );
 
-
-        // =================================================
-        // FILTRO SKU
-        // =================================================
-
         if (sku) {
-
-            consulta = consulta.eq(
+            query = query.eq(
                 "sku",
                 String(sku).trim()
             );
-
         }
-
-
-        // =================================================
-        // FILTRO TIPO
-        // =================================================
 
         if (
             tipo === "entrada" ||
             tipo === "saida"
         ) {
-
-            consulta = consulta.eq(
+            query = query.eq(
                 "tipo_movimentacao",
                 tipo
             );
-
         }
 
-
-        // =================================================
-        // FILTRO RESPONSÁVEL
-        // =================================================
-
         if (responsavel) {
-
-            consulta = consulta.ilike(
+            query = query.ilike(
                 "responsavel",
                 `%${String(responsavel).trim()}%`
             );
-
         }
 
-
-        // =================================================
-        // FILTRO DATA INICIAL
-        // =================================================
-
         if (data_inicio) {
-
-            consulta = consulta.gte(
+            query = query.gte(
                 "criado_em",
                 data_inicio
             );
-
         }
 
-
-        // =================================================
-        // FILTRO DATA FINAL
-        // =================================================
-
         if (data_fim) {
-
-            consulta = consulta.lte(
+            query = query.lte(
                 "criado_em",
                 data_fim
             );
-
         }
-
 
         const {
             data,
             error
-        } = await consulta;
-
+        } = await query;
 
         if (error) {
-
-            console.error(
-                "ERRO AO BUSCAR MOVIMENTAÇÕES:",
-                error
-            );
-
-            return res.status(500).json({
-
-                erro:
-                    error.message ||
-                    "Erro ao buscar movimentações.",
-
-                details:
-                    error.details || null,
-
-                hint:
-                    error.hint || null,
-
-                code:
-                    error.code || null
-
-            });
-
+            throw error;
         }
 
-
-        return res.status(200).json(
+        res.json(
             data || []
         );
-
     })
 );
 
@@ -188,248 +122,187 @@ router.post(
     "/entrada",
     asyncHandler(async (req, res) => {
 
-        try {
+        const {
+            sku,
+            quantidade,
+            responsavel,
+            observacoes = null
+        } = req.body;
 
-            console.log(
-                "================================="
+        validarSKU(sku);
+
+        const valor =
+            validarQuantidade(
+                quantidade
             );
 
-            console.log(
-                "TASKUP - ENTRADA"
-            );
+        if (!responsavel?.trim()) {
+            return res.status(400).json({
+                erro:
+                    "O responsável é obrigatório."
+            });
+        }
 
-            console.log(
-                "BODY:",
-                req.body
-            );
-
-            console.log(
-                "================================="
-            );
+        const skuLimpo =
+            String(sku).trim();
 
 
-            const {
+        // -------------------------------------------------
+        // BUSCA PRODUTO
+        // -------------------------------------------------
+
+        const {
+            data: produto,
+            error: produtoError
+        } = await supabase
+            .from("produtos")
+            .select(`
+                id,
                 sku,
+                nome,
                 quantidade,
-                responsavel,
-                observacoes = null
-            } = req.body;
+                familia_id,
+                tipo_id
+            `)
+            .eq("sku", skuLimpo)
+            .maybeSingle();
 
 
-            // ---------------------------------------------
-            // VALIDA SKU
-            // ---------------------------------------------
-
-            validarSKU(sku);
+        if (produtoError) {
+            throw produtoError;
+        }
 
 
-            // ---------------------------------------------
-            // VALIDA QUANTIDADE
-            // ---------------------------------------------
-
-            const valor =
-                validarQuantidade(
-                    quantidade
-                );
+        if (!produto) {
+            return res.status(404).json({
+                erro:
+                    `Produto ${skuLimpo} não encontrado.`
+            });
+        }
 
 
-            // ---------------------------------------------
-            // VALIDA RESPONSÁVEL
-            // ---------------------------------------------
+        // -------------------------------------------------
+        // NOVO ESTOQUE
+        // -------------------------------------------------
 
-            if (!responsavel?.trim()) {
+        const estoqueAtual =
+            Number(
+                produto.quantidade
+            ) || 0;
 
-                return res.status(400).json({
-
-                    erro:
-                        "O responsável é obrigatório."
-
-                });
-
-            }
+        const novoEstoque =
+            estoqueAtual + valor;
 
 
-            // ---------------------------------------------
-            // LIMPA DADOS
-            // ---------------------------------------------
+        // -------------------------------------------------
+        // ATUALIZA PRODUTO
+        // -------------------------------------------------
 
-            const skuLimpo =
-                String(
-                    sku
-                ).trim();
+        const {
+            data: produtoAtualizado,
+            error: updateError
+        } = await supabase
+            .from("produtos")
+            .update({
+                quantidade:
+                    novoEstoque,
 
-
-            const responsavelLimpo =
-                String(
-                    responsavel
-                ).trim();
-
-
-            const observacoesLimpa =
-                observacoes === null ||
-                observacoes === undefined ||
-                String(observacoes).trim() === ""
-                    ? null
-                    : String(
-                        observacoes
-                    ).trim();
+                atualizado_em:
+                    new Date().toISOString()
+            })
+            .eq(
+                "id",
+                produto.id
+            )
+            .select()
+            .single();
 
 
-            // ---------------------------------------------
-            // PARAMETROS DA RPC
-            // ---------------------------------------------
+        if (updateError) {
+            throw updateError;
+        }
 
-            const parametros = {
 
-                p_sku:
-                    skuLimpo,
+        // -------------------------------------------------
+        // CRIA HISTÓRICO
+        // -------------------------------------------------
 
-                p_tipo_movimentacao:
+        const {
+            data: movimentacao,
+            error: movimentoError
+        } = await supabase
+            .from("movimentacoes")
+            .insert({
+                produto_id:
+                    produto.id,
+
+                sku:
+                    produto.sku,
+
+                familia_id:
+                    produto.familia_id,
+
+                tipo_id:
+                    produto.tipo_id,
+
+                tipo_movimentacao:
                     "entrada",
 
-                p_quantidade:
+                quantidade:
                     valor,
 
-                p_motivo:
+                motivo:
                     "Entrada no arquivo morto",
 
-                p_responsavel:
-                    responsavelLimpo,
+                responsavel:
+                    String(
+                        responsavel
+                    ).trim(),
 
-                p_observacoes:
-                    observacoesLimpa
-
-            };
-
-
-            console.log(
-                "PARAMETROS RPC:",
-                parametros
-            );
-
-
-            // ---------------------------------------------
-            // CHAMA SUPABASE
-            // ---------------------------------------------
-
-            const {
-                data,
-                error
-            } = await supabase.rpc(
-                "registrar_movimentacao",
-                parametros
-            );
+                observacoes:
+                    observacoes
+                        ? String(observacoes).trim()
+                        : null
+            })
+            .select()
+            .single();
 
 
-            // ---------------------------------------------
-            // ERRO DO SUPABASE
-            // ---------------------------------------------
+        if (movimentoError) {
 
-            if (error) {
+            // Se o histórico falhar, desfaz
+            // a atualização do estoque.
+            await supabase
+                .from("produtos")
+                .update({
+                    quantidade:
+                        estoqueAtual,
 
-                console.error(
-                    "================================="
+                    atualizado_em:
+                        new Date().toISOString()
+                })
+                .eq(
+                    "id",
+                    produto.id
                 );
 
-                console.error(
-                    "ERRO RPC ENTRADA"
-                );
-
-                console.error(
-                    "MESSAGE:",
-                    error.message
-                );
-
-                console.error(
-                    "DETAILS:",
-                    error.details
-                );
-
-                console.error(
-                    "HINT:",
-                    error.hint
-                );
-
-                console.error(
-                    "CODE:",
-                    error.code
-                );
-
-                console.error(
-                    "================================="
-                );
-
-
-                return res.status(500).json({
-
-                    erro:
-                        error.message ||
-                        "Erro ao registrar entrada.",
-
-                    details:
-                        error.details || null,
-
-                    hint:
-                        error.hint || null,
-
-                    code:
-                        error.code || null
-
-                });
-
-            }
-
-
-            const movimentacao =
-                Array.isArray(data)
-                    ? data[0]
-                    : data;
-
-
-            console.log(
-                "ENTRADA REGISTRADA:",
-                movimentacao
-            );
-
-
-            return res.status(201).json({
-
-                sucesso: true,
-
-                mensagem:
-                    "Entrada registrada com sucesso.",
-
-                movimentacao:
-                    movimentacao || null
-
-            });
-
-        } catch (error) {
-
-            console.error(
-                "ERRO GERAL ENTRADA:",
-                error
-            );
-
-
-            return res.status(500).json({
-
-                erro:
-                    error.message ||
-                    "Erro interno do servidor.",
-
-                details:
-                    error.details || null,
-
-                hint:
-                    error.hint || null,
-
-                code:
-                    error.code || null
-
-            });
-
+            throw movimentoError;
         }
+
+
+        res.status(201).json({
+
+            sucesso: true,
+
+            mensagem:
+                "Entrada registrada com sucesso.",
+
+            produto:
+                produtoAtualizado,
+
+            movimentacao
+
+        });
 
     })
 );
@@ -444,360 +317,213 @@ router.post(
     "/saida",
     asyncHandler(async (req, res) => {
 
-        try {
+        const {
+            sku,
+            quantidade,
+            motivo,
+            responsavel,
+            observacoes = null
+        } = req.body;
 
-            console.log(
-                "================================="
+        validarSKU(sku);
+
+        const valor =
+            validarQuantidade(
+                quantidade
             );
 
-            console.log(
-                "TASKUP - SAÍDA"
-            );
-
-            console.log(
-                "BODY:",
-                req.body
-            );
-
-            console.log(
-                "================================="
-            );
-
-
-            const {
-                sku,
-                quantidade,
-                motivo,
-                responsavel,
-                observacoes = null
-            } = req.body;
-
-
-            // ---------------------------------------------
-            // VALIDA SKU
-            // ---------------------------------------------
-
-            validarSKU(sku);
-
-
-            // ---------------------------------------------
-            // VALIDA QUANTIDADE
-            // ---------------------------------------------
-
-            const valor =
-                validarQuantidade(
-                    quantidade
-                );
-
-
-            // ---------------------------------------------
-            // VALIDA MOTIVO
-            // ---------------------------------------------
-
-            if (!motivo?.trim()) {
-
-                return res.status(400).json({
-
-                    erro:
-                        "O motivo é obrigatório."
-
-                });
-
-            }
-
-
-            // ---------------------------------------------
-            // VALIDA RESPONSÁVEL
-            // ---------------------------------------------
-
-            if (!responsavel?.trim()) {
-
-                return res.status(400).json({
-
-                    erro:
-                        "O responsável é obrigatório."
-
-                });
-
-            }
-
-
-            // ---------------------------------------------
-            // LIMPA DADOS
-            // ---------------------------------------------
-
-            const skuLimpo =
-                String(
-                    sku
-                ).trim();
-
-
-            const motivoLimpo =
-                String(
-                    motivo
-                ).trim();
-
-
-            const responsavelLimpo =
-                String(
-                    responsavel
-                ).trim();
-
-
-            const observacoesLimpa =
-                observacoes === null ||
-                observacoes === undefined ||
-                String(observacoes).trim() === ""
-                    ? null
-                    : String(
-                        observacoes
-                    ).trim();
-
-
-            // ---------------------------------------------
-            // PARAMETROS DA RPC
-            // ---------------------------------------------
-
-            const parametros = {
-
-                p_sku:
-                    skuLimpo,
-
-                p_tipo_movimentacao:
-                    "saida",
-
-                p_quantidade:
-                    valor,
-
-                p_motivo:
-                    motivoLimpo,
-
-                p_responsavel:
-                    responsavelLimpo,
-
-                p_observacoes:
-                    observacoesLimpa
-
-            };
-
-
-            console.log(
-                "PARAMETROS RPC:",
-                parametros
-            );
-
-
-            // ---------------------------------------------
-            // CHAMA SUPABASE
-            // ---------------------------------------------
-
-            const {
-                data,
-                error
-            } = await supabase.rpc(
-                "registrar_movimentacao",
-                parametros
-            );
-
-
-            // ---------------------------------------------
-            // ERRO DO SUPABASE
-            // ---------------------------------------------
-
-            if (error) {
-
-                console.error(
-                    "================================="
-                );
-
-                console.error(
-                    "ERRO RPC SAÍDA"
-                );
-
-                console.error(
-                    "MESSAGE:",
-                    error.message
-                );
-
-                console.error(
-                    "DETAILS:",
-                    error.details
-                );
-
-                console.error(
-                    "HINT:",
-                    error.hint
-                );
-
-                console.error(
-                    "CODE:",
-                    error.code
-                );
-
-                console.error(
-                    "================================="
-                );
-
-
-                const mensagem =
-                    String(
-                        error.message || ""
-                    ).toLowerCase();
-
-
-                if (
-                    mensagem.includes(
-                        "estoque_insuficiente"
-                    ) ||
-                    mensagem.includes(
-                        "estoque insuficiente"
-                    )
-                ) {
-
-                    return res.status(409).json({
-
-                        erro:
-                            "Estoque insuficiente para realizar a retirada."
-
-                    });
-
-                }
-
-
-                return res.status(500).json({
-
-                    erro:
-                        error.message ||
-                        "Erro ao registrar saída.",
-
-                    details:
-                        error.details || null,
-
-                    hint:
-                        error.hint || null,
-
-                    code:
-                        error.code || null
-
-                });
-
-            }
-
-
-            const movimentacao =
-                Array.isArray(data)
-                    ? data[0]
-                    : data;
-
-
-            console.log(
-                "SAÍDA REGISTRADA:",
-                movimentacao
-            );
-
-
-            return res.status(201).json({
-
-                sucesso: true,
-
-                mensagem:
-                    "Saída registrada com sucesso.",
-
-                movimentacao:
-                    movimentacao || null
-
-            });
-
-        } catch (error) {
-
-            console.error(
-                "ERRO GERAL SAÍDA:",
-                error
-            );
-
-
-            return res.status(500).json({
-
+        if (!motivo?.trim()) {
+            return res.status(400).json({
                 erro:
-                    error.message ||
-                    "Erro interno do servidor.",
-
-                details:
-                    error.details || null,
-
-                hint:
-                    error.hint || null,
-
-                code:
-                    error.code || null
-
+                    "O motivo é obrigatório."
             });
-
         }
 
-    })
-);
+        if (!responsavel?.trim()) {
+            return res.status(400).json({
+                erro:
+                    "O responsável é obrigatório."
+            });
+        }
+
+        const skuLimpo =
+            String(sku).trim();
 
 
-// =====================================================
-// TESTE DA ROTA
-// GET /api/movimentacoes/teste
-// =====================================================
-
-router.get(
-    "/teste",
-    asyncHandler(async (req, res) => {
+        // -------------------------------------------------
+        // BUSCA PRODUTO
+        // -------------------------------------------------
 
         const {
-            data,
-            error
+            data: produto,
+            error: produtoError
         } = await supabase
-            .from("movimentacoes")
-            .select("id")
-            .limit(1);
+            .from("produtos")
+            .select(`
+                id,
+                sku,
+                nome,
+                quantidade,
+                familia_id,
+                tipo_id
+            `)
+            .eq("sku", skuLimpo)
+            .maybeSingle();
 
 
-        if (error) {
-
-            console.error(
-                "ERRO TESTE MOVIMENTAÇÕES:",
-                error
-            );
-
-
-            return res.status(500).json({
-
-                sucesso: false,
-
-                erro:
-                    error.message,
-
-                details:
-                    error.details || null,
-
-                hint:
-                    error.hint || null,
-
-                code:
-                    error.code || null
-
-            });
-
+        if (produtoError) {
+            throw produtoError;
         }
 
 
-        return res.status(200).json({
+        if (!produto) {
+            return res.status(404).json({
+                erro:
+                    `Produto ${skuLimpo} não encontrado.`
+            });
+        }
+
+
+        // -------------------------------------------------
+        // ESTOQUE
+        // -------------------------------------------------
+
+        const estoqueAtual =
+            Number(
+                produto.quantidade
+            ) || 0;
+
+
+        if (
+            valor >
+            estoqueAtual
+        ) {
+
+            return res.status(409).json({
+                erro:
+                    "Estoque insuficiente.",
+
+                estoque_atual:
+                    estoqueAtual,
+
+                solicitado:
+                    valor
+            });
+        }
+
+
+        const novoEstoque =
+            estoqueAtual - valor;
+
+
+        // -------------------------------------------------
+        // ATUALIZA PRODUTO
+        // -------------------------------------------------
+
+        const {
+            data: produtoAtualizado,
+            error: updateError
+        } = await supabase
+            .from("produtos")
+            .update({
+                quantidade:
+                    novoEstoque,
+
+                atualizado_em:
+                    new Date().toISOString()
+            })
+            .eq(
+                "id",
+                produto.id
+            )
+            .select()
+            .single();
+
+
+        if (updateError) {
+            throw updateError;
+        }
+
+
+        // -------------------------------------------------
+        // CRIA HISTÓRICO
+        // -------------------------------------------------
+
+        const {
+            data: movimentacao,
+            error: movimentoError
+        } = await supabase
+            .from("movimentacoes")
+            .insert({
+                produto_id:
+                    produto.id,
+
+                sku:
+                    produto.sku,
+
+                familia_id:
+                    produto.familia_id,
+
+                tipo_id:
+                    produto.tipo_id,
+
+                tipo_movimentacao:
+                    "saida",
+
+                quantidade:
+                    valor,
+
+                motivo:
+                    String(
+                        motivo
+                    ).trim(),
+
+                responsavel:
+                    String(
+                        responsavel
+                    ).trim(),
+
+                observacoes:
+                    observacoes
+                        ? String(observacoes).trim()
+                        : null
+            })
+            .select()
+            .single();
+
+
+        if (movimentoError) {
+
+            // Desfaz alteração do estoque.
+            await supabase
+                .from("produtos")
+                .update({
+                    quantidade:
+                        estoqueAtual,
+
+                    atualizado_em:
+                        new Date().toISOString()
+                })
+                .eq(
+                    "id",
+                    produto.id
+                );
+
+            throw movimentoError;
+        }
+
+
+        res.status(201).json({
 
             sucesso: true,
 
             mensagem:
-                "Rota de movimentações funcionando.",
+                "Saída registrada com sucesso.",
 
-            banco:
-                "conectado",
+            produto:
+                produtoAtualizado,
 
-            registros:
-                data?.length || 0
+            movimentacao
 
         });
 
