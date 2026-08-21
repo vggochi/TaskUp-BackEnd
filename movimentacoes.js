@@ -29,69 +29,74 @@ router.get(
             limite = 100
         } = req.query;
 
-
-        let consulta = supabase
-            .from("movimentacoes")
-            .select(`
-                *,
-                produto:produtos(
-                    id,
-                    sku,
-                    nome,
-                    localizacao
-                ),
-                familia:familias(
-                    id,
-                    codigo,
-                    nome
-                ),
-                tipo_registro:tipos(
-                    id,
-                    codigo,
-                    nome
-                )
-            `)
-            .order("criado_em", {
-                ascending: false
-            })
-            .limit(
-                Math.min(
-                    Number(limite) || 100,
-                    500
-                )
-            );
-
+        let consulta =
+            supabase
+                .from("movimentacoes")
+                .select(`
+                    *,
+                    produto:produtos(
+                        id,
+                        sku,
+                        nome,
+                        localizacao,
+                        quantidade
+                    ),
+                    familia:familias(
+                        id,
+                        codigo,
+                        nome
+                    ),
+                    tipo_registro:tipos(
+                        id,
+                        codigo,
+                        nome
+                    )
+                `)
+                .order("criado_em", {
+                    ascending: false
+                })
+                .limit(
+                    Math.min(
+                        Math.max(
+                            Number(limite) || 100,
+                            1
+                        ),
+                        500
+                    )
+                );
 
         if (sku) {
 
-            consulta = consulta.eq(
-                "sku",
-                sku
-            );
-        }
+            consulta =
+                consulta.eq(
+                    "sku",
+                    String(sku).trim()
+                );
 
+        }
 
         if (
             tipo === "entrada" ||
             tipo === "saida"
         ) {
 
-            consulta = consulta.eq(
-                "tipo_movimentacao",
-                tipo
-            );
-        }
+            consulta =
+                consulta.eq(
+                    "tipo_movimentacao",
+                    tipo
+                );
 
+        }
 
         if (responsavel) {
 
             consulta =
                 consulta.ilike(
                     "responsavel",
-                    `%${responsavel}%`
+                    `%${String(responsavel).trim()}%`
                 );
-        }
 
+        }
 
         if (data_inicio) {
 
@@ -100,31 +105,30 @@ router.get(
                     "criado_em",
                     data_inicio
                 );
-        }
 
+        }
 
         if (data_fim) {
 
             consulta =
-                consulta.lte(
+                consulta.lt(
                     "criado_em",
-                    data_fim
+                    `${data_fim}T23:59:59.999Z`
                 );
-        }
 
+        }
 
         const {
             data,
             error
         } = await consulta;
 
-
         if (error) {
             throw error;
         }
 
+        res.json(data || []);
 
-        res.json(data);
     })
 );
 
@@ -138,6 +142,11 @@ router.post(
     "/entrada",
     asyncHandler(async (req, res) => {
 
+        console.log(
+            "ENTRADA RECEBIDA:",
+            req.body
+        );
+
         const {
             sku,
             quantidade,
@@ -145,24 +154,25 @@ router.post(
             observacoes = null
         } = req.body;
 
+        const skuValidado =
+            validarSKU(sku);
 
-        validarSKU(sku);
-
-
-        const valor =
+        const quantidadeValidada =
             validarQuantidade(
                 quantidade
             );
 
-
-        if (!responsavel?.trim()) {
+        if (
+            !responsavel ||
+            !String(responsavel).trim()
+        ) {
 
             return res.status(400).json({
                 erro:
                     "O responsável é obrigatório."
             });
-        }
 
+        }
 
         const {
             data,
@@ -170,34 +180,54 @@ router.post(
         } = await supabase.rpc(
             "registrar_movimentacao",
             {
-                p_sku: sku,
+                p_sku:
+                    skuValidado,
+
                 p_tipo_movimentacao:
                     "entrada",
-                p_quantidade: valor,
+
+                p_quantidade:
+                    quantidadeValidada,
+
                 p_motivo:
                     "Entrada no arquivo morto",
+
                 p_responsavel:
-                    responsavel.trim(),
+                    String(responsavel).trim(),
+
                 p_observacoes:
-                    observacoes
+                    observacoes || null
             }
         );
 
-
         if (error) {
-            throw error;
-        }
 
+            console.error(
+                "ERRO RPC ENTRADA:",
+                error
+            );
+
+            throw error;
+
+        }
 
         const movimentacao =
             Array.isArray(data)
                 ? data[0]
                 : data;
 
-
-        res.status(201).json(
+        console.log(
+            "ENTRADA REGISTRADA:",
             movimentacao
         );
+
+        res.status(201).json({
+            sucesso: true,
+            mensagem:
+                "Entrada registrada com sucesso.",
+            movimentacao
+        });
+
     })
 );
 
@@ -211,6 +241,11 @@ router.post(
     "/saida",
     asyncHandler(async (req, res) => {
 
+        console.log(
+            "SAÍDA RECEBIDA:",
+            req.body
+        );
+
         const {
             sku,
             quantidade,
@@ -219,27 +254,37 @@ router.post(
             observacoes = null
         } = req.body;
 
+        const skuValidado =
+            validarSKU(sku);
 
-        validarSKU(sku);
-
-
-        const valor =
+        const quantidadeValidada =
             validarQuantidade(
                 quantidade
             );
 
-
         if (
-            !motivo?.trim() ||
-            !responsavel?.trim()
+            !motivo ||
+            !String(motivo).trim()
         ) {
 
             return res.status(400).json({
                 erro:
-                    "Motivo e responsável são obrigatórios."
+                    "O motivo da retirada é obrigatório."
             });
+
         }
 
+        if (
+            !responsavel ||
+            !String(responsavel).trim()
+        ) {
+
+            return res.status(400).json({
+                erro:
+                    "O responsável é obrigatório."
+            });
+
+        }
 
         const {
             data,
@@ -247,25 +292,44 @@ router.post(
         } = await supabase.rpc(
             "registrar_movimentacao",
             {
-                p_sku: sku,
+                p_sku:
+                    skuValidado,
+
                 p_tipo_movimentacao:
                     "saida",
-                p_quantidade: valor,
+
+                p_quantidade:
+                    quantidadeValidada,
+
                 p_motivo:
-                    motivo.trim(),
+                    String(motivo).trim(),
+
                 p_responsavel:
-                    responsavel.trim(),
+                    String(responsavel).trim(),
+
                 p_observacoes:
-                    observacoes
+                    observacoes || null
             }
         );
 
-
         if (error) {
 
+            console.error(
+                "ERRO RPC SAÍDA:",
+                error
+            );
+
+            const mensagem =
+                String(
+                    error.message || ""
+                ).toLowerCase();
+
             if (
-                error.message?.includes(
-                    "ESTOQUE_INSUFICIENTE"
+                mensagem.includes(
+                    "estoque"
+                ) ||
+                mensagem.includes(
+                    "insuficiente"
                 )
             ) {
 
@@ -273,22 +337,30 @@ router.post(
                     erro:
                         "Estoque insuficiente para realizar a retirada."
                 });
+
             }
 
-
             throw error;
-        }
 
+        }
 
         const movimentacao =
             Array.isArray(data)
                 ? data[0]
                 : data;
 
-
-        res.status(201).json(
+        console.log(
+            "SAÍDA REGISTRADA:",
             movimentacao
         );
+
+        res.status(201).json({
+            sucesso: true,
+            mensagem:
+                "Saída registrada com sucesso.",
+            movimentacao
+        });
+
     })
 );
 
