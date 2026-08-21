@@ -1,8 +1,6 @@
 import { Router } from "express";
 
-import {
-    supabase
-} from "./supabase.js";
+import { supabase } from "./supabase.js";
 
 import {
     asyncHandler
@@ -12,7 +10,7 @@ const router = Router();
 
 
 // =====================================================
-// RESUMO DO DASHBOARD
+// RESUMO
 // GET /api/painel/resumo
 // =====================================================
 
@@ -21,16 +19,19 @@ router.get(
     asyncHandler(async (req, res) => {
 
         const [
-            produtos,
-            familias,
-            tipos,
-            movimentacoes
+            produtosResult,
+            familiasResult,
+            tiposResult,
+            movimentacoesResult
         ] = await Promise.all([
 
             supabase
                 .from("produtos")
                 .select(
-                    "id,quantidade,estoque_minimo"
+                    "id, quantidade, estoque_minimo",
+                    {
+                        count: "exact"
+                    }
                 ),
 
             supabase
@@ -38,8 +39,7 @@ router.get(
                 .select(
                     "id",
                     {
-                        count: "exact",
-                        head: true
+                        count: "exact"
                     }
                 ),
 
@@ -48,72 +48,42 @@ router.get(
                 .select(
                     "id",
                     {
-                        count: "exact",
-                        head: true
+                        count: "exact"
                     }
                 ),
 
             supabase
                 .from("movimentacoes")
-                .select(`
-                    *,
-                    produto:produtos(
-                        sku,
-                        nome
-                    )
-                `)
-                .order(
-                    "criado_em",
+                .select(
+                    "id",
                     {
-                        ascending: false
+                        count: "exact"
                     }
                 )
-                .limit(10)
         ]);
 
-
-        if (produtos.error) {
-            throw produtos.error;
+        if (produtosResult.error) {
+            throw produtosResult.error;
         }
 
-
-        if (familias.error) {
-            throw familias.error;
+        if (familiasResult.error) {
+            throw familiasResult.error;
         }
 
-
-        if (tipos.error) {
-            throw tipos.error;
+        if (tiposResult.error) {
+            throw tiposResult.error;
         }
 
-
-        if (movimentacoes.error) {
-            throw movimentacoes.error;
+        if (movimentacoesResult.error) {
+            throw movimentacoesResult.error;
         }
 
+        const produtos =
+            produtosResult.data || [];
 
-        const listaProdutos =
-            produtos.data || [];
-
-
-        const estoqueBaixo =
-            listaProdutos.filter(
-                produto =>
-                    Number(
-                        produto.quantidade
-                    ) <=
-                    Number(
-                        produto.estoque_minimo
-                    )
-            );
-
-
-        const quantidadeTotal =
-            listaProdutos.reduce(
-                (
-                    total,
-                    produto
-                ) =>
+        const estoqueTotal =
+            produtos.reduce(
+                (total, produto) =>
                     total +
                     Number(
                         produto.quantidade || 0
@@ -121,27 +91,39 @@ router.get(
                 0
             );
 
+        const estoqueBaixo =
+            produtos.filter(
+                produto =>
+                    Number(
+                        produto.quantidade || 0
+                    ) <=
+                    Number(
+                        produto.estoque_minimo || 0
+                    )
+            ).length;
 
         res.json({
 
-            total_produtos:
-                listaProdutos.length,
+            produtos:
+                produtosResult.count || 0,
 
-            quantidade_total:
-                quantidadeTotal,
+            familias:
+                familiasResult.count || 0,
+
+            tipos:
+                tiposResult.count || 0,
+
+            movimentacoes:
+                movimentacoesResult.count || 0,
+
+            estoque_total:
+                estoqueTotal,
 
             estoque_baixo:
-                estoqueBaixo.length,
+                estoqueBaixo
 
-            total_familias:
-                familias.count || 0,
-
-            total_tipos:
-                tipos.count || 0,
-
-            movimentacoes_recentes:
-                movimentacoes.data || []
         });
+
     })
 );
 
