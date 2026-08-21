@@ -65,80 +65,75 @@ router.get(
             );
 
 
-        // -------------------------------------------------
+        // =================================================
         // FILTRO SKU
-        // -------------------------------------------------
+        // =================================================
 
         if (sku) {
 
-            consulta =
-                consulta.eq(
-                    "sku",
-                    String(sku).trim()
-                );
+            consulta = consulta.eq(
+                "sku",
+                String(sku).trim()
+            );
 
         }
 
 
-        // -------------------------------------------------
+        // =================================================
         // FILTRO TIPO
-        // -------------------------------------------------
+        // =================================================
 
         if (
             tipo === "entrada" ||
             tipo === "saida"
         ) {
 
-            consulta =
-                consulta.eq(
-                    "tipo_movimentacao",
-                    tipo
-                );
+            consulta = consulta.eq(
+                "tipo_movimentacao",
+                tipo
+            );
 
         }
 
 
-        // -------------------------------------------------
+        // =================================================
         // FILTRO RESPONSÁVEL
-        // -------------------------------------------------
+        // =================================================
 
         if (responsavel) {
 
-            consulta =
-                consulta.ilike(
-                    "responsavel",
-                    `%${String(responsavel).trim()}%`
-                );
+            consulta = consulta.ilike(
+                "responsavel",
+                `%${String(responsavel).trim()}%`
+            );
 
         }
 
 
-        // -------------------------------------------------
+        // =================================================
         // FILTRO DATA INICIAL
-        // -------------------------------------------------
+        // =================================================
 
         if (data_inicio) {
 
-            consulta =
-                consulta.gte(
-                    "criado_em",
-                    data_inicio
-                );
+            consulta = consulta.gte(
+                "criado_em",
+                data_inicio
+            );
 
         }
 
 
-        // -------------------------------------------------
+        // =================================================
         // FILTRO DATA FINAL
-        // -------------------------------------------------
+        // =================================================
 
         if (data_fim) {
 
-            consulta =
-                consulta.lte(
-                    "criado_em",
-                    data_fim
-                );
+            consulta = consulta.lte(
+                "criado_em",
+                data_fim
+            );
 
         }
 
@@ -156,14 +151,11 @@ router.get(
                 error
             );
 
-
             return res.status(500).json({
 
                 erro:
+                    error.message ||
                     "Erro ao buscar movimentações.",
-
-                mensagem:
-                    error.message,
 
                 details:
                     error.details || null,
@@ -196,234 +188,235 @@ router.post(
     "/entrada",
     asyncHandler(async (req, res) => {
 
-        console.log(
-            "================================="
-        );
+        try {
 
-        console.log(
-            "POST /api/movimentacoes/entrada"
-        );
+            console.log(
+                "================================="
+            );
 
-        console.log(
-            "BODY:",
-            req.body
-        );
+            console.log(
+                "TASKUP - ENTRADA"
+            );
 
-        console.log(
-            "================================="
-        );
+            console.log(
+                "BODY:",
+                req.body
+            );
 
-
-        const {
-            sku,
-            quantidade,
-            responsavel,
-            observacoes = null
-        } = req.body;
-
-
-        // -------------------------------------------------
-        // VALIDAÇÕES
-        // -------------------------------------------------
-
-        validarSKU(sku);
-
-
-        const valor =
-            validarQuantidade(
-                quantidade
+            console.log(
+                "================================="
             );
 
 
-        if (!responsavel?.trim()) {
-
-            return res.status(400).json({
-
-                erro:
-                    "O responsável é obrigatório."
-
-            });
-
-        }
-
-
-        const skuLimpo =
-            String(sku).trim();
-
-
-        const responsavelLimpo =
-            String(
-                responsavel
-            ).trim();
-
-
-        const observacoesLimpa =
-            observacoes
-                ? String(
-                    observacoes
-                ).trim()
-                : null;
-
-
-        // -------------------------------------------------
-        // VERIFICA PRODUTO
-        // -------------------------------------------------
-
-        const {
-            data: produto,
-            error: produtoError
-        } = await supabase
-            .from("produtos")
-            .select(`
-                id,
+            const {
                 sku,
-                nome,
                 quantidade,
-                familia_id,
-                tipo_id
-            `)
-            .eq(
-                "sku",
-                skuLimpo
-            )
-            .maybeSingle();
+                responsavel,
+                observacoes = null
+            } = req.body;
 
 
-        if (produtoError) {
+            // ---------------------------------------------
+            // VALIDA SKU
+            // ---------------------------------------------
+
+            validarSKU(sku);
+
+
+            // ---------------------------------------------
+            // VALIDA QUANTIDADE
+            // ---------------------------------------------
+
+            const valor =
+                validarQuantidade(
+                    quantidade
+                );
+
+
+            // ---------------------------------------------
+            // VALIDA RESPONSÁVEL
+            // ---------------------------------------------
+
+            if (!responsavel?.trim()) {
+
+                return res.status(400).json({
+
+                    erro:
+                        "O responsável é obrigatório."
+
+                });
+
+            }
+
+
+            // ---------------------------------------------
+            // LIMPA DADOS
+            // ---------------------------------------------
+
+            const skuLimpo =
+                String(
+                    sku
+                ).trim();
+
+
+            const responsavelLimpo =
+                String(
+                    responsavel
+                ).trim();
+
+
+            const observacoesLimpa =
+                observacoes === null ||
+                observacoes === undefined ||
+                String(observacoes).trim() === ""
+                    ? null
+                    : String(
+                        observacoes
+                    ).trim();
+
+
+            // ---------------------------------------------
+            // PARAMETROS DA RPC
+            // ---------------------------------------------
+
+            const parametros = {
+
+                p_sku:
+                    skuLimpo,
+
+                p_tipo_movimentacao:
+                    "entrada",
+
+                p_quantidade:
+                    valor,
+
+                p_motivo:
+                    "Entrada no arquivo morto",
+
+                p_responsavel:
+                    responsavelLimpo,
+
+                p_observacoes:
+                    observacoesLimpa
+
+            };
+
+
+            console.log(
+                "PARAMETROS RPC:",
+                parametros
+            );
+
+
+            // ---------------------------------------------
+            // CHAMA SUPABASE
+            // ---------------------------------------------
+
+            const {
+                data,
+                error
+            } = await supabase.rpc(
+                "registrar_movimentacao",
+                parametros
+            );
+
+
+            // ---------------------------------------------
+            // ERRO DO SUPABASE
+            // ---------------------------------------------
+
+            if (error) {
+
+                console.error(
+                    "================================="
+                );
+
+                console.error(
+                    "ERRO RPC ENTRADA"
+                );
+
+                console.error(
+                    "MESSAGE:",
+                    error.message
+                );
+
+                console.error(
+                    "DETAILS:",
+                    error.details
+                );
+
+                console.error(
+                    "HINT:",
+                    error.hint
+                );
+
+                console.error(
+                    "CODE:",
+                    error.code
+                );
+
+                console.error(
+                    "================================="
+                );
+
+
+                return res.status(500).json({
+
+                    erro:
+                        error.message ||
+                        "Erro ao registrar entrada.",
+
+                    details:
+                        error.details || null,
+
+                    hint:
+                        error.hint || null,
+
+                    code:
+                        error.code || null
+
+                });
+
+            }
+
+
+            const movimentacao =
+                Array.isArray(data)
+                    ? data[0]
+                    : data;
+
+
+            console.log(
+                "ENTRADA REGISTRADA:",
+                movimentacao
+            );
+
+
+            return res.status(201).json({
+
+                sucesso: true,
+
+                mensagem:
+                    "Entrada registrada com sucesso.",
+
+                movimentacao:
+                    movimentacao || null
+
+            });
+
+        } catch (error) {
 
             console.error(
-                "ERRO AO BUSCAR PRODUTO:",
-                produtoError
+                "ERRO GERAL ENTRADA:",
+                error
             );
 
 
             return res.status(500).json({
 
                 erro:
-                    "Erro ao consultar produto.",
-
-                mensagem:
-                    produtoError.message,
-
-                details:
-                    produtoError.details || null,
-
-                hint:
-                    produtoError.hint || null,
-
-                code:
-                    produtoError.code || null
-
-            });
-
-        }
-
-
-        if (!produto) {
-
-            return res.status(404).json({
-
-                erro:
-                    `Produto com SKU ${skuLimpo} não encontrado.`
-
-            });
-
-        }
-
-
-        // -------------------------------------------------
-        // RPC
-        // -------------------------------------------------
-
-        console.log(
-            "EXECUTANDO RPC registrar_movimentacao..."
-        );
-
-
-        const parametros = {
-
-            p_sku:
-                skuLimpo,
-
-            p_tipo_movimentacao:
-                "entrada",
-
-            p_quantidade:
-                valor,
-
-            p_motivo:
-                "Entrada no arquivo morto",
-
-            p_responsavel:
-                responsavelLimpo,
-
-            p_observacoes:
-                observacoesLimpa
-
-        };
-
-
-        console.log(
-            "PARAMETROS RPC:",
-            parametros
-        );
-
-
-        const {
-            data,
-            error
-        } = await supabase.rpc(
-            "registrar_movimentacao",
-            parametros
-        );
-
-
-        // -------------------------------------------------
-        // ERRO RPC
-        // -------------------------------------------------
-
-        if (error) {
-
-            console.error(
-                "================================="
-            );
-
-            console.error(
-                "ERRO SUPABASE - ENTRADA"
-            );
-
-            console.error(
-                "message:",
-                error.message
-            );
-
-            console.error(
-                "details:",
-                error.details
-            );
-
-            console.error(
-                "hint:",
-                error.hint
-            );
-
-            console.error(
-                "code:",
-                error.code
-            );
-
-            console.error(
-                "================================="
-            );
-
-
-            return res.status(500).json({
-
-                erro:
-                    "Erro ao registrar entrada.",
-
-                mensagem:
-                    error.message,
+                    error.message ||
+                    "Erro interno do servidor.",
 
                 details:
                     error.details || null,
@@ -437,35 +430,6 @@ router.post(
             });
 
         }
-
-
-        // -------------------------------------------------
-        // RESULTADO
-        // -------------------------------------------------
-
-        const movimentacao =
-            Array.isArray(data)
-                ? data[0]
-                : data;
-
-
-        console.log(
-            "ENTRADA REGISTRADA:",
-            movimentacao
-        );
-
-
-        return res.status(201).json({
-
-            sucesso: true,
-
-            mensagem:
-                "Entrada registrada com sucesso.",
-
-            movimentacao:
-                movimentacao || null
-
-        });
 
     })
 );
@@ -480,303 +444,283 @@ router.post(
     "/saida",
     asyncHandler(async (req, res) => {
 
-        console.log(
-            "================================="
-        );
+        try {
 
-        console.log(
-            "POST /api/movimentacoes/saida"
-        );
+            console.log(
+                "================================="
+            );
 
-        console.log(
-            "BODY:",
-            req.body
-        );
+            console.log(
+                "TASKUP - SAÍDA"
+            );
 
-        console.log(
-            "================================="
-        );
+            console.log(
+                "BODY:",
+                req.body
+            );
 
-
-        const {
-            sku,
-            quantidade,
-            motivo,
-            responsavel,
-            observacoes = null
-        } = req.body;
-
-
-        // -------------------------------------------------
-        // VALIDAÇÕES
-        // -------------------------------------------------
-
-        validarSKU(sku);
-
-
-        const valor =
-            validarQuantidade(
-                quantidade
+            console.log(
+                "================================="
             );
 
 
-        if (
-            !motivo?.trim() ||
-            !responsavel?.trim()
-        ) {
-
-            return res.status(400).json({
-
-                erro:
-                    "Motivo e responsável são obrigatórios."
-
-            });
-
-        }
-
-
-        const skuLimpo =
-            String(
-                sku
-            ).trim();
-
-
-        const motivoLimpo =
-            String(
-                motivo
-            ).trim();
-
-
-        const responsavelLimpo =
-            String(
-                responsavel
-            ).trim();
-
-
-        const observacoesLimpa =
-            observacoes
-                ? String(
-                    observacoes
-                ).trim()
-                : null;
-
-
-        // -------------------------------------------------
-        // VERIFICA PRODUTO
-        // -------------------------------------------------
-
-        const {
-            data: produto,
-            error: produtoError
-        } = await supabase
-            .from("produtos")
-            .select(`
-                id,
+            const {
                 sku,
-                nome,
                 quantidade,
-                familia_id,
-                tipo_id
-            `)
-            .eq(
-                "sku",
-                skuLimpo
-            )
-            .maybeSingle();
+                motivo,
+                responsavel,
+                observacoes = null
+            } = req.body;
 
 
-        if (produtoError) {
+            // ---------------------------------------------
+            // VALIDA SKU
+            // ---------------------------------------------
 
-            console.error(
-                "ERRO AO BUSCAR PRODUTO:",
-                produtoError
-            );
-
-
-            return res.status(500).json({
-
-                erro:
-                    "Erro ao consultar produto.",
-
-                mensagem:
-                    produtoError.message,
-
-                details:
-                    produtoError.details || null,
-
-                hint:
-                    produtoError.hint || null,
-
-                code:
-                    produtoError.code || null
-
-            });
-
-        }
+            validarSKU(sku);
 
 
-        if (!produto) {
+            // ---------------------------------------------
+            // VALIDA QUANTIDADE
+            // ---------------------------------------------
 
-            return res.status(404).json({
-
-                erro:
-                    `Produto com SKU ${skuLimpo} não encontrado.`
-
-            });
-
-        }
+            const valor =
+                validarQuantidade(
+                    quantidade
+                );
 
 
-        // -------------------------------------------------
-        // ESTOQUE
-        // -------------------------------------------------
+            // ---------------------------------------------
+            // VALIDA MOTIVO
+            // ---------------------------------------------
 
-        const estoqueAtual =
-            Number(
-                produto.quantidade
-            ) || 0;
+            if (!motivo?.trim()) {
 
-
-        if (
-            valor >
-            estoqueAtual
-        ) {
-
-            return res.status(409).json({
-
-                erro:
-                    "Estoque insuficiente para realizar a retirada.",
-
-                estoque_atual:
-                    estoqueAtual,
-
-                solicitado:
-                    valor
-
-            });
-
-        }
-
-
-        // -------------------------------------------------
-        // RPC
-        // -------------------------------------------------
-
-        console.log(
-            "EXECUTANDO RPC registrar_movimentacao..."
-        );
-
-
-        const parametros = {
-
-            p_sku:
-                skuLimpo,
-
-            p_tipo_movimentacao:
-                "saida",
-
-            p_quantidade:
-                valor,
-
-            p_motivo:
-                motivoLimpo,
-
-            p_responsavel:
-                responsavelLimpo,
-
-            p_observacoes:
-                observacoesLimpa
-
-        };
-
-
-        console.log(
-            "PARAMETROS RPC:",
-            parametros
-        );
-
-
-        const {
-            data,
-            error
-        } = await supabase.rpc(
-            "registrar_movimentacao",
-            parametros
-        );
-
-
-        // -------------------------------------------------
-        // ERRO RPC
-        // -------------------------------------------------
-
-        if (error) {
-
-            console.error(
-                "================================="
-            );
-
-            console.error(
-                "ERRO SUPABASE - SAÍDA"
-            );
-
-            console.error(
-                "message:",
-                error.message
-            );
-
-            console.error(
-                "details:",
-                error.details
-            );
-
-            console.error(
-                "hint:",
-                error.hint
-            );
-
-            console.error(
-                "code:",
-                error.code
-            );
-
-            console.error(
-                "================================="
-            );
-
-
-            const textoErro =
-                String(
-                    error.message ||
-                    ""
-                ).toLowerCase();
-
-
-            if (
-                textoErro.includes(
-                    "estoque_insuficiente"
-                ) ||
-                textoErro.includes(
-                    "estoque insuficiente"
-                )
-            ) {
-
-                return res.status(409).json({
+                return res.status(400).json({
 
                     erro:
-                        "Estoque insuficiente para realizar a retirada."
+                        "O motivo é obrigatório."
 
                 });
 
             }
 
 
+            // ---------------------------------------------
+            // VALIDA RESPONSÁVEL
+            // ---------------------------------------------
+
+            if (!responsavel?.trim()) {
+
+                return res.status(400).json({
+
+                    erro:
+                        "O responsável é obrigatório."
+
+                });
+
+            }
+
+
+            // ---------------------------------------------
+            // LIMPA DADOS
+            // ---------------------------------------------
+
+            const skuLimpo =
+                String(
+                    sku
+                ).trim();
+
+
+            const motivoLimpo =
+                String(
+                    motivo
+                ).trim();
+
+
+            const responsavelLimpo =
+                String(
+                    responsavel
+                ).trim();
+
+
+            const observacoesLimpa =
+                observacoes === null ||
+                observacoes === undefined ||
+                String(observacoes).trim() === ""
+                    ? null
+                    : String(
+                        observacoes
+                    ).trim();
+
+
+            // ---------------------------------------------
+            // PARAMETROS DA RPC
+            // ---------------------------------------------
+
+            const parametros = {
+
+                p_sku:
+                    skuLimpo,
+
+                p_tipo_movimentacao:
+                    "saida",
+
+                p_quantidade:
+                    valor,
+
+                p_motivo:
+                    motivoLimpo,
+
+                p_responsavel:
+                    responsavelLimpo,
+
+                p_observacoes:
+                    observacoesLimpa
+
+            };
+
+
+            console.log(
+                "PARAMETROS RPC:",
+                parametros
+            );
+
+
+            // ---------------------------------------------
+            // CHAMA SUPABASE
+            // ---------------------------------------------
+
+            const {
+                data,
+                error
+            } = await supabase.rpc(
+                "registrar_movimentacao",
+                parametros
+            );
+
+
+            // ---------------------------------------------
+            // ERRO DO SUPABASE
+            // ---------------------------------------------
+
+            if (error) {
+
+                console.error(
+                    "================================="
+                );
+
+                console.error(
+                    "ERRO RPC SAÍDA"
+                );
+
+                console.error(
+                    "MESSAGE:",
+                    error.message
+                );
+
+                console.error(
+                    "DETAILS:",
+                    error.details
+                );
+
+                console.error(
+                    "HINT:",
+                    error.hint
+                );
+
+                console.error(
+                    "CODE:",
+                    error.code
+                );
+
+                console.error(
+                    "================================="
+                );
+
+
+                const mensagem =
+                    String(
+                        error.message || ""
+                    ).toLowerCase();
+
+
+                if (
+                    mensagem.includes(
+                        "estoque_insuficiente"
+                    ) ||
+                    mensagem.includes(
+                        "estoque insuficiente"
+                    )
+                ) {
+
+                    return res.status(409).json({
+
+                        erro:
+                            "Estoque insuficiente para realizar a retirada."
+
+                    });
+
+                }
+
+
+                return res.status(500).json({
+
+                    erro:
+                        error.message ||
+                        "Erro ao registrar saída.",
+
+                    details:
+                        error.details || null,
+
+                    hint:
+                        error.hint || null,
+
+                    code:
+                        error.code || null
+
+                });
+
+            }
+
+
+            const movimentacao =
+                Array.isArray(data)
+                    ? data[0]
+                    : data;
+
+
+            console.log(
+                "SAÍDA REGISTRADA:",
+                movimentacao
+            );
+
+
+            return res.status(201).json({
+
+                sucesso: true,
+
+                mensagem:
+                    "Saída registrada com sucesso.",
+
+                movimentacao:
+                    movimentacao || null
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "ERRO GERAL SAÍDA:",
+                error
+            );
+
+
             return res.status(500).json({
 
                 erro:
-                    "Erro ao registrar saída.",
-
-                mensagem:
-                    error.message,
+                    error.message ||
+                    "Erro interno do servidor.",
 
                 details:
                     error.details || null,
@@ -790,35 +734,6 @@ router.post(
             });
 
         }
-
-
-        // -------------------------------------------------
-        // RESULTADO
-        // -------------------------------------------------
-
-        const movimentacao =
-            Array.isArray(data)
-                ? data[0]
-                : data;
-
-
-        console.log(
-            "SAÍDA REGISTRADA:",
-            movimentacao
-        );
-
-
-        return res.status(201).json({
-
-            sucesso: true,
-
-            mensagem:
-                "Saída registrada com sucesso.",
-
-            movimentacao:
-                movimentacao || null
-
-        });
 
     })
 );
@@ -844,12 +759,27 @@ router.get(
 
         if (error) {
 
+            console.error(
+                "ERRO TESTE MOVIMENTAÇÕES:",
+                error
+            );
+
+
             return res.status(500).json({
 
                 sucesso: false,
 
                 erro:
-                    error.message
+                    error.message,
+
+                details:
+                    error.details || null,
+
+                hint:
+                    error.hint || null,
+
+                code:
+                    error.code || null
 
             });
 
